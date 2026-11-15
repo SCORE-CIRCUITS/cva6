@@ -53,7 +53,7 @@
 // allow modulus.  You can also use a double, if you wish.
 static vluint64_t main_time = 0;
 
-static const char *verilog_plusargs[] = {"jtag_rbb_enable", "time_out", "debug_disable"};
+static const char *verilog_plusargs[] = {"jtag_rbb_enable", "time_out", "debug_disable", "elf_file", "tohost_addr"};
 
 extern dtm_t* dtm;
 extern remote_bitbang_t * jtag;
@@ -342,17 +342,20 @@ done_processing:
   long long addr;
   long long len;
 
-  size_t mem_size = 0xFFFFFF;
   while(get_section(&addr, &len))
   {
-    if (addr == 0x80000000)
-        read_section_void(addr, (void *) MEM , mem_size);
-    if (addr == 0x84000000)
+    if (addr >= 0x80000000 && (uint64_t)(addr - 0x80000000) < (33554432ULL * 8)) {
+        size_t offset = (size_t)(addr - 0x80000000);
+        read_section_void(addr, (void *) ((uint8_t*)MEM + offset), len);
+    }
+    if (addr >= 0x84000000 && (uint64_t)(addr - 0x84000000) < (33554432ULL * 8)) {
         try {
-          read_section_void(addr, (void *) MEM_USER , mem_size);
+          size_t offset = (size_t)(addr - 0x84000000);
+          read_section_void(addr, (void *) ((uint8_t*)MEM_USER + offset), len);
         } catch (...){
           std::cerr << "No user memory instanciated ...\n";
         }
+    }
   }
 
   while (!dtm->done() && !jtag->done() && !(top->exit_o & 0x1)) {

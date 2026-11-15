@@ -17,6 +17,8 @@
 #include <iostream>
 
 #define SHT_PROGBITS 0x1
+#define SHT_SYMTAB 0x2
+#define SHT_STRTAB 0x3
 #define SHT_GROUP 0x11
 
 // address and size
@@ -62,6 +64,23 @@ extern "C" void read_section (long long address, const svOpenArrayHandle buffer)
     }
 }
 
+extern "C" void read_section_void(long long address, void * buffer, uint64_t size) {
+    if (mems.count(address) > 0) {
+        const auto &vec = mems.find(address)->second;
+        size_t copy_size = size > 0 ? std::min((size_t)size, vec.size()) : vec.size();
+        memcpy(buffer, vec.data(), copy_size);
+    }
+}
+
+extern "C" char read_symbol(const char* symbol_name, unsigned long long* address) {
+    auto it = symbols.find(symbol_name);
+    if (it != symbols.end()) {
+        *address = it->second;
+        return 1;
+    }
+    return 0;
+}
+
 extern "C" void read_elf(const char* filename) {
     int fd = open(filename, O_RDONLY);
     struct stat s;
@@ -81,7 +100,6 @@ extern "C" void read_elf(const char* filename) {
 
 
     std::vector<uint8_t> zeros;
-    std::map<std::string, uint64_t> symbols;
 
     #define LOAD_ELF(ehdr_t, phdr_t, shdr_t, sym_t) do { \
     ehdr_t* eh = (ehdr_t*)buf; \
@@ -105,14 +123,11 @@ extern "C" void read_elf(const char* filename) {
     char *shstrtab = buf + sh[eh->e_shstrndx].sh_offset; \
     unsigned strtabidx = 0, symtabidx = 0; \
     for (unsigned i = 0; i < eh->e_shnum; i++) { \
-      unsigned max_len = sh[eh->e_shstrndx].sh_size - sh[i].sh_name; \
-      if ((sh[i].sh_type & SHT_GROUP) && strcmp(shstrtab + sh[i].sh_name, ".strtab") != 0 && strcmp(shstrtab + sh[i].sh_name, ".shstrtab") != 0) \
-      assert(strnlen(shstrtab + sh[i].sh_name, max_len) < max_len); \
-      if (sh[i].sh_type & SHT_PROGBITS) continue; \
-      if (strcmp(shstrtab + sh[i].sh_name, ".strtab") == 0) \
-        strtabidx = i; \
-      if (strcmp(shstrtab + sh[i].sh_name, ".symtab") == 0) \
+      if (sh[i].sh_type == SHT_SYMTAB) { \
         symtabidx = i; \
+        strtabidx = sh[i].sh_link; \
+        break; \
+      } \
     } \
     if (strtabidx && symtabidx) { \
       char* strtab = buf + sh[strtabidx].sh_offset; \

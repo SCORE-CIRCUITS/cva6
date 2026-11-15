@@ -113,9 +113,9 @@ void abort()
 
 void printstr(const char* s)
 {
-#if !NOPRINT
-  syscall(SYS_write, 1, (uintptr_t)s, strlen(s));
-#endif
+  while (*s) {
+    putchar(*s++);
+  }
 }
 
 void __attribute__((weak)) thread_entry(int cid, int nc)
@@ -154,7 +154,7 @@ void _init(int cid, int nc)
   char* pbuf = buf;
   for (int i = 0; i < NUM_COUNTERS; i++)
     if (counters[i])
-      pbuf += sprintf(pbuf, "%s = %zu\n", counter_names[i], counters[i]);
+      pbuf += sprintf(pbuf, "%s = %lu\n", counter_names[i], (unsigned long)counters[i]);
   if (pbuf != buf)
     printstr(buf);
 
@@ -175,19 +175,10 @@ int puts(const char *s)
 #undef putchar
 int putchar(int ch)
 {
-#if !NOPRINT
-  static __thread char buf[64] __attribute__((aligned(64)));
-  static __thread int buflen = 0;
-
-  buf[buflen++] = ch;
-
-  if (ch == '\n' || buflen == sizeof(buf))
-  {
-    syscall(SYS_write, 1, (uintptr_t)buf, buflen);
-    buflen = 0;
-  }
-#endif
-
+  volatile uint8_t *lsr = (volatile uint8_t *)0x10000014;
+  while ((*lsr & 0x20) == 0);
+  volatile uint8_t *uart = (volatile uint8_t *)0x10000000;
+  *uart = (uint8_t)ch;
   return 0;
 }
 
